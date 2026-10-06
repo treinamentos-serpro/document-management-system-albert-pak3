@@ -12,5 +12,60 @@ Remember, it's self-paced so feel free to take a break! ☕️
 
 ---
 
+## Backend DMS
+
+O backend usa as camadas `routes -> controllers -> services -> repositories`.
+Arquivos ficam somente em `backend/storage` via Multer `diskStorage`; contas e
+metadados ficam em memória. Reiniciar perde contas e metadados, mas não remove
+automaticamente os arquivos já gravados.
+
+Para iniciar, execute em `backend`:
+
+```sh
+npm install
+export JWT_SECRET="$(openssl rand -hex 32)"
+export JWT_EXPIRES_IN=1h
+npm start
+```
+
+`JWT_SECRET` é obrigatório, não possui valor padrão e não deve ser versionado.
+`JWT_EXPIRES_IN` aceita uma duração com unidade, como `1h` ou `30m` (padrão `1h`).
+`PORT` tem padrão `3000`. Testes usam um segredo próprio e são executados com
+`npm test`.
+
+Cadastro e login recebem JSON com `username` (3 a 64 caracteres: letras, números,
+ponto, hífen ou sublinhado) e `password` (8 a 128 caracteres no cadastro).
+Senhas são armazenadas somente como hashes com salt usando `scrypt`.
+
+```sh
+curl -X POST http://localhost:3000/auth/register \
+	-H 'Content-Type: application/json' \
+	-d '{"username":"usuario","password":"senha-segura-123"}'
+curl -X POST http://localhost:3000/auth/login \
+	-H 'Content-Type: application/json' \
+	-d '{"username":"usuario","password":"senha-segura-123"}'
+```
+
+O login retorna `token`, `tokenType` e `expiresIn`. Com o token em `TOKEN`:
+
+```sh
+curl http://localhost:3000/upload -H "Authorization: Bearer $TOKEN" \
+	-F 'file=@documento.txt;type=text/plain'
+curl http://localhost:3000/documents -H "Authorization: Bearer $TOKEN"
+curl http://localhost:3000/documents/IDENTIFICADOR/download \
+	-H "Authorization: Bearer $TOKEN" -OJ
+```
+
+O upload retorna os metadados com status `201`; listagem e download retornam `200`.
+Somente arquivos PDF, DOCX, XLSX, PPTX e TXT são aceitos, até 10 MiB, com extensão e
+MIME declarado correspondentes. Essa validação não inspeciona o conteúdo e não
+substitui verificação antivírus. O proprietário vem do JWT, nunca do formulário.
+Listagem e download são limitados ao próprio usuário; documentos de outro usuário
+e arquivos indisponíveis retornam `404`. Os erros usam
+`{ "error": { "code": "...", "message": "..." } }`.
+
+As rotas do backend não possuem prefixo `/api`; esse prefixo é usado pelo proxy
+do frontend em desenvolvimento. `GET /health` continua público.
+
 &copy; 2025 GitHub &bull; [Code of Conduct](https://www.contributor-covenant.org/version/2/1/code_of_conduct/code_of_conduct.md) &bull; [MIT License](https://gh.io/mit)
 
