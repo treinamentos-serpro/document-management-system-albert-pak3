@@ -12,8 +12,9 @@ const allowedTypes = new Map([
 ]);
 
 function validateFile(file) {
-  if (allowedTypes.get(path.extname(file.originalname).toLowerCase()) !== file.mimetype) {
-    throw new ServiceError(415, 'UNSUPPORTED_FILE_TYPE', 'Envie um arquivo PDF, DOCX, XLSX, PPTX ou TXT com tipo correspondente.');
+  const isImage = /^image\/[a-z0-9][a-z0-9.+-]*$/i.test(file.mimetype);
+  if (!isImage && allowedTypes.get(path.extname(file.originalname).toLowerCase()) !== file.mimetype) {
+    throw new ServiceError(415, 'UNSUPPORTED_FILE_TYPE', 'Envie uma imagem ou um arquivo PDF, DOCX, XLSX, PPTX ou TXT com tipo correspondente.');
   }
 }
 

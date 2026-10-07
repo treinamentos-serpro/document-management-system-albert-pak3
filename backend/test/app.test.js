@@ -130,10 +130,45 @@ test('autenticação e documentos locais seguem os contratos da API', async cont
     assert.strictEqual((await fetch(`${baseUrl}${route}`, { headers })).status, 404);
   });
 
+  await context.test('imagens de diferentes formatos podem ser enviadas e baixadas', async () => {
+    const formats = [
+      ['png', 'image/png'],
+      ['jpg', 'image/jpeg'],
+      ['gif', 'image/gif'],
+      ['webp', 'image/webp'],
+      ['svg', 'image/svg+xml'],
+      ['bmp', 'image/bmp'],
+      ['tiff', 'image/tiff'],
+      ['avif', 'image/avif'],
+      ['heic', 'image/heic'],
+      ['ico', 'image/vnd.microsoft.icon'],
+    ];
+    for (const [extension, type] of formats) {
+      const content = Buffer.from([0, 1, 2, 127, 255]);
+      const filename = `imagem.${extension}`;
+      const response = await upload(first.token, content, filename, type);
+      assert.strictEqual(response.status, 201, filename);
+      const image = await response.json();
+      createdFiles.add(image.id);
+      assert.strictEqual(image.originalName, filename);
+      const download = await fetch(`${baseUrl}/documents/${image.id}/download`, { headers });
+      assert.strictEqual(download.status, 200);
+      assert.ok(download.headers.get('content-type').startsWith(type));
+      assert.match(download.headers.get('content-disposition'), /attachment/);
+      assert.deepStrictEqual(Buffer.from(await download.arrayBuffer()), content);
+      const otherDownload = await fetch(`${baseUrl}/documents/${image.id}/download`, {
+        headers: { Authorization: `Bearer ${second.token}` },
+      });
+      assert.strictEqual(otherDownload.status, 404);
+    }
+  });
+
   await context.test('uploads inválidos não deixam arquivos no disco', async () => {
     const initialFiles = (await readdir(storageDirectory)).sort();
     assert.strictEqual((await upload(first.token, 'executavel', 'arquivo.exe', 'application/octet-stream')).status, 415);
     assert.strictEqual((await upload(first.token, 'texto', 'arquivo.pdf', 'text/plain')).status, 415);
+    assert.strictEqual((await upload(first.token, 'texto', 'imagem.png', 'text/plain')).status, 415);
+    assert.strictEqual((await upload(first.token, Buffer.alloc(10 * 1024 * 1024 + 1), 'grande.png', 'image/png')).status, 413);
     assert.strictEqual((await upload(first.token, 'texto', 'arquivo.txt', 'text/plain', 'campoErrado')).status, 400);
     assert.strictEqual((await fetch(`${baseUrl}/upload`, { method: 'POST', headers })).status, 400);
     const malformed = await fetch(`${baseUrl}/upload`, {

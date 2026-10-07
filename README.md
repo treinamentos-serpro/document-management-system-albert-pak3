@@ -1,5 +1,33 @@
 # Document Management System com GitHub Copilot
 
+## Frontend
+
+```sh
+npm install --prefix frontend
+npm run dev --prefix frontend
+npm test --prefix frontend
+npm run build --prefix frontend
+```
+
+O cliente usa `/api`, com proxy do Vite para `http://localhost:3000`.
+Inicie também o backend com `JWT_SECRET` conforme a seção abaixo. Na interface,
+crie uma conta ou entre com usuário e senha para acessar os documentos. O token
+fica somente em memória no navegador: ao recarregar a página, entre novamente.
+O seletor mostra os formatos permitidos e o limite de 10 MiB por arquivo.
+
+- `POST /auth/register` e `POST /auth/login`: JSON com `username` e `password`.
+- `POST /upload`: multipart com o campo `file`, resposta `201` com metadados.
+- `GET /documents`: objeto `{ documents: [...] }`, com `id`, `originalName`,
+  `size` em bytes, `uploadedAt` em formato ISO e `owner`.
+- `GET /documents/:id/download`: conteudo binario do arquivo.
+
+As rotas de documentos exigem `Authorization: Bearer <token>`.
+Respostas de erro usam `{ error: { code, message } }`.
+Em producao, configure o servidor para encaminhar `/api` ao backend; o proxy
+do Vite se aplica somente ao desenvolvimento.
+
+## Workshop
+
 <img src="https://octodex.github.com/images/Professortocat_v2.png" align="right" height="200px" />
 
 Hey albertpak01!
@@ -57,8 +85,11 @@ curl http://localhost:3000/documents/IDENTIFICADOR/download \
 ```
 
 O upload retorna os metadados com status `201`; listagem e download retornam `200`.
-Somente arquivos PDF, DOCX, XLSX, PPTX e TXT são aceitos, até 10 MiB, com extensão e
-MIME declarado correspondentes. Essa validação não inspeciona o conteúdo e não
+São aceitas imagens com MIME declarado `image/*` (PNG, JPEG, GIF, WebP, SVG,
+BMP, TIFF, AVIF, HEIC e outros), além de PDF, DOCX, XLSX, PPTX e TXT com extensão
+e MIME correspondentes. O limite é de 10 MiB por arquivo, um arquivo por envio.
+Imagens são servidas como anexos para download, sem visualização inline.
+Áudio e vídeo ainda não são aceitos. Essa validação não inspeciona o conteúdo e não
 substitui verificação antivírus. O proprietário vem do JWT, nunca do formulário.
 Listagem e download são limitados ao próprio usuário; documentos de outro usuário
 e arquivos indisponíveis retornam `404`. Os erros usam
