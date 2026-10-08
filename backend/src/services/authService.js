@@ -1,10 +1,7 @@
-const { randomBytes, scrypt, timingSafeEqual } = require('node:crypto');
-const { promisify } = require('node:util');
-const jwt = require('jsonwebtoken');
 const userRepository = require('../repositories/userRepository');
+const passwordService = require('./passwordService');
 const ServiceError = require('./serviceError');
-
-const deriveKey = promisify(scrypt);
+const tokenService = require('./tokenService');
 
 function validateCredentials(username, password) {
   if (typeof username !== 'string' || !/^[a-zA-Z0-9_.-]{3,64}$/.test(username) ||
@@ -21,47 +18,31 @@ async function register({ username, password } = {}) {
   if (userRepository.findByUsername(username)) {
     throw new ServiceError(409, 'USERNAME_TAKEN', 'Nome de usuário já cadastrado.');
   }
-  const salt = randomBytes(16).toString('hex');
-  const hash = await deriveKey(password, salt, 64);
+  const passwordHash = await passwordService.hashPassword(password);
   if (userRepository.findByUsername(username)) {
     throw new ServiceError(409, 'USERNAME_TAKEN', 'Nome de usuário já cadastrado.');
   }
-  const user = userRepository.create(username, `${salt}:${hash.toString('hex')}`);
+  const user = userRepository.create(username, passwordHash);
   return { id: user.id, username: user.username };
 }
 
 async function login({ username, password } = {}) {
   validateCredentials(username, password);
   const user = userRepository.findByUsername(username);
-  const [salt, storedHash] = user ? user.passwordHash.split(':') : ['invalid-user-salt', '00'.repeat(64)];
-  const hash = await deriveKey(password, salt, 64);
-  if (!user || !timingSafeEqual(hash, Buffer.from(storedHash, 'hex'))) {
+  const passwordMatches = await passwordService.verifyPassword(password, user?.passwordHash);
+  if (!user || !passwordMatches) {
     throw new ServiceError(401, 'INVALID_LOGIN', 'Usuário ou senha inválidos.');
   }
-  const expiresIn = process.env.JWT_EXPIRES_IN || '1h';
-  const token = jwt.sign({}, getSecret(), { algorithm: 'HS256', subject: user.id, expiresIn });
+  const { token, expiresIn } = tokenService.issueToken(user.id);
   return { token, tokenType: 'Bearer', expiresIn };
 }
 
-function getSecret() {
-  if (!process.env.JWT_SECRET) {
-    throw new Error('Configure JWT_SECRET antes de iniciar o backend.');
-  }
-  return process.env.JWT_SECRET;
-}
-
 function authenticate(token) {
-  const secret = getSecret();
-  let payload;
-  try {
-    payload = jwt.verify(token, secret, { algorithms: ['HS256'] });
-  } catch {
+  const userId = tokenService.getSubject(token);
+  if (!userId || !userRepository.findById(userId)) {
     throw new ServiceError(401, 'UNAUTHORIZED', 'Autenticação necessária.');
   }
-  if (typeof payload.sub !== 'string' || !Number.isFinite(payload.exp) || !userRepository.findById(payload.sub)) {
-    throw new ServiceError(401, 'UNAUTHORIZED', 'Autenticação necessária.');
-  }
-  return payload.sub;
+  return userId;
 }
 
-module.exports = { register, login, authenticate, getSecret };
+module.exports = { register, login, authenticate };
